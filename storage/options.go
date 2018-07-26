@@ -1,12 +1,12 @@
 package storage
 
-
 type cacheOpt func(o *cacheOptions)
 
 type cacheOptions struct {
-	ItemsNum uint
+	ItemsNum   uint
 	BucketsNum uint
-	TTL int
+	TTL        int
+	DumpPath   string
 }
 
 func ShardsNum(i uint) cacheOpt {
@@ -27,3 +27,8 @@ func DefaultTTL(i int) cacheOpt {
 	}
 }
 
+func DumpPath(path string) cacheOpt {
+	return func(o *cacheOptions) {
+		o.DumpPath = path
+	}
+}

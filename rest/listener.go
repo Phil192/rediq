@@ -1,50 +1,50 @@
 package rest
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/rediq/storage"
-	"io"
-	"strconv"
-	"os"
 	"io/ioutil"
-	"encoding/json"
+	"strconv"
 )
 
 type application struct {
 	mux   *gin.Engine
 	cache storage.Storer
+	opt   *listenerOptions
 }
 
-func NewApp(c storage.Storer, logFile io.Writer) *application {
-	gin.DefaultWriter = os.Stdout
-	if logFile != nil {
-		gin.DefaultWriter = io.MultiWriter(logFile)
-	}
+func NewApp(c storage.Storer, opts ...listenerOpt) *application {
 	app := &application{
 		cache: c,
+		opt:   &listenerOptions{},
+	}
+	for _, o := range opts {
+		if o != nil {
+			o(app.opt)
+		}
 	}
 	return app
 }
 
-func (a *application) ListenAndServe(addr string) error {
-	return a.mux.Run(addr)
+func (a *application) ListenAndServe() error {
+	return a.mux.Run(a.opt.socket)
 }
 
 func (a *application) RouteAPI(r *gin.Engine) {
 	r.POST("/api/v1/set", TokenAuthMiddleware(), a.SetHandler)
 	r.POST("/api/v1/setWithTTL", TokenAuthMiddleware(), a.SetWithTTLHandler)
 	r.GET("/api/v1/get/:key", TokenAuthMiddleware(), a.GetHandler)
-	r.GET("/api/v1/content", TokenAuthMiddleware(), a.GetContentHandler)
 	r.DELETE("/api/v1/remove/:key", TokenAuthMiddleware(), a.DeleteHandler)
 	r.GET("/api/v1/keys/:key", TokenAuthMiddleware(), a.KeysHandler)
 	a.mux = r
-
 }
+
 type postItem struct {
-	Key string `json:"key"`
+	Key   string `json:"key"`
 	Value string `json:"value"`
-	TTL		int `json:"ttl"`
+	TTL   int    `json:"ttl"`
 }
 
 func (a *application) SetHandler(c *gin.Context) {
@@ -53,11 +53,11 @@ func (a *application) SetHandler(c *gin.Context) {
 
 	data, err := ioutil.ReadAll(body)
 	if err != nil {
-		c.AbortWithStatus(500)
+		c.AbortWithError(500, err)
 		return
 	}
 	if err := json.Unmarshal(data, &item); err != nil {
-		c.AbortWithStatus(500)
+		c.AbortWithError(500, err)
 		return
 	}
 	if item.Key == "" || item.Value == "" {
@@ -65,7 +65,7 @@ func (a *application) SetHandler(c *gin.Context) {
 		return
 	}
 	if err := a.cache.Set(item.Key, item.Value); err != nil {
-		c.AbortWithStatus(500)
+		c.AbortWithError(500, err)
 		return
 	}
 	c.String(200, fmt.Sprintf("%s/api/v1/get/%s", c.Request.Host, item.Key))
@@ -77,11 +77,11 @@ func (a *application) SetWithTTLHandler(c *gin.Context) {
 
 	data, err := ioutil.ReadAll(body)
 	if err != nil {
-		c.AbortWithStatus(500)
+		c.AbortWithError(500, err)
 		return
 	}
 	if err := json.Unmarshal(data, &item); err != nil {
-		c.AbortWithStatus(500)
+		c.AbortWithError(500, err)
 		return
 	}
 	if item.Key == "" || item.Value == "" {
@@ -89,11 +89,10 @@ func (a *application) SetWithTTLHandler(c *gin.Context) {
 		return
 	}
 	if err := a.cache.SetWithTTL(item.Key, item.Value, item.TTL); err != nil {
-		c.AbortWithStatus(500)
+		c.AbortWithError(500, err)
 		return
 	}
 	c.String(200, c.Request.Host, fmt.Sprintf("/api/v1/get/%s", item.Key))
-
 }
 
 func (a *application) GetHandler(c *gin.Context) {
@@ -104,7 +103,7 @@ func (a *application) GetHandler(c *gin.Context) {
 	}
 	val, err := a.cache.Get(key)
 	if err == storage.ErrNotFound {
-		c.AbortWithStatus(404)
+		c.AbortWithError(404, err)
 		return
 	} else if err != nil {
 		c.AbortWithError(500, err)
@@ -114,7 +113,7 @@ func (a *application) GetHandler(c *gin.Context) {
 }
 
 func (a *application) GetContentHandler(c *gin.Context) {
-	var resp []byte
+	var resp string
 	var err error
 
 	key := c.Query("key")
@@ -144,9 +143,9 @@ func (a *application) GetContentHandler(c *gin.Context) {
 		c.AbortWithError(500, err)
 		return
 	}
-	c.String(200, string(resp))
-
+	c.JSON(200, gin.H{"content": string(resp)})
 }
+
 
 func (a *application) DeleteHandler(c *gin.Context) {
 	key := c.Param("key")
@@ -159,7 +158,6 @@ func (a *application) DeleteHandler(c *gin.Context) {
 		return
 	}
 	c.Status(200)
-
 }
 
 func (a *application) KeysHandler(c *gin.Context) {
@@ -169,10 +167,9 @@ func (a *application) KeysHandler(c *gin.Context) {
 		return
 	}
 	matchings := a.cache.Keys(key)
-	if len(*matchings) == 0 {
+	if len(matchings) == 0 {
 		c.AbortWithStatus(404)
 		return
 	}
 	c.JSON(200, matchings)
-
 }

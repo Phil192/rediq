@@ -1,9 +1,9 @@
 package storage
 
 import (
-	"reflect"
 	"errors"
 	log "github.com/sirupsen/logrus"
+	"reflect"
 )
 
 var ErrNotFound = errors.New("not found in cache")
@@ -11,6 +11,7 @@ var ErrSubSeqType = errors.New("subsequence must be defined by string or positiv
 var ErrNotSequence = errors.New("returned value is not subsequence. Use Get method instead.")
 var ErrUnknownDataType = errors.New("only strings, maps and slices are supported.")
 var ErrNegativeTTL = errors.New("ttl must be positive integer")
+var ErrDumpFail = errors.New("fail to dump data")
 
 type InputType int
 
@@ -22,19 +23,19 @@ const (
 
 type Storer interface {
 	Get(string) (*Value, error)
-	GetContent(string, interface{}) ([]byte, error)
+	GetContent(string, interface{}) (string, error)
 	Set(string, interface{}) error
 	SetWithTTL(string, interface{}, int) error
-	Keys(string) *[]string
+	Keys(string) []string
 	Remove(string) error
 	Run()
 	Close()
 }
 
 type Value struct {
-	Body interface{} `json:"body"`
-	TTL  int `json:"ttl"`
-	DataType InputType `json:"type"`
+	Body     interface{} `json:"body"`
+	TTL      int         `json:"ttl"`
+	DataType InputType   `json:"type"`
 }
 
 func newValue(data interface{}, ttl int) (*Value, error) {
@@ -61,8 +62,8 @@ func newValue(data interface{}, ttl int) (*Value, error) {
 		ttl = -1
 	}
 	v := &Value{
-		Body: data,
-		TTL:  ttl,
+		Body:     data,
+		TTL:      ttl,
 		DataType: dataType,
 	}
 	return v, nil
@@ -75,4 +76,3 @@ func (v *Value) decrTTL() bool {
 	}
 	return false
 }
-

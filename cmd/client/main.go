@@ -1,39 +1,46 @@
 package main
 
 import (
-	"github.com/abiosoft/ishell"
-	"fmt"
-	"net/http"
-	"io/ioutil"
-	"flag"
-	"net/url"
-	"encoding/json"
 	"bytes"
-	"strconv"
 	"crypto/sha1"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"github.com/abiosoft/ishell"
 	"github.com/fatih/color"
-	"os"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"strconv"
 )
-type postItem struct {
-	Key string `json:"key"`
-	Value string `json:"value"`
-	TTL		int `json:"ttl"`
+
+type User interface {
+	Socket() string
+	Post(addr string, data postItem) ([]byte, error)
+	Get(addr, key string) ([]byte, error)
+	Delete(addr, key string) ([]byte, error)
 }
 
 type cacheClient struct {
-	cli *http.Client
-	sock string
+	cli   *http.Client
+	sock  string
 	login string
-	pass string
+	pass  string
 }
 
-func newClient(sock, lgn, pass string) *cacheClient {
+func newClient(sock, lgn, pass string) User {
 	return &cacheClient{
-		cli:&http.Client{},
-		sock:sock,
+		cli:   &http.Client{},
+		sock:  sock,
 		login: lgn,
-		pass: pass,
+		pass:  pass,
 	}
+}
+
+type postItem struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+	TTL   int    `json:"ttl"`
 }
 
 func main() {
@@ -43,52 +50,27 @@ func main() {
 	flag.Parse()
 
 	shell := ishell.New()
-	notice("Rediq cache storage. Simple Interactive Client")
-
 	cli := newClient(
 		*sock,
 		*login,
 		*password,
-		)
+	)
 
 	resp, err := cli.Get(*sock, "/ping")
 	if err != nil {
 		fail("Can't connect to cache server", string(resp))
 		return
 	}
+	notice("Rediq cache storage. Simple Interactive Client")
 	shell.AddCmd(&ishell.Cmd{
 		Name: "set",
-		Help: "set value to cache",
-		Func: func(c *ishell.Context) {
-			if len(c.Args) != 2 {
-				fail("must be two values")
-				os.Exit(1)
-			}
-			u, err := url.ParseRequestURI(cli.sock)
-			if err != nil {
-				fail(err)
-				return
-			}
-			u.Path = "/api/v1/set/"
-
-			data := postItem{c.Args[0], c.Args[1], 0}
-			body, err := cli.Post(u.String(), data)
-			if err != nil {
-				fail(err)
-				return
-			}
-			success(string(body))
-		},
-	})
-	shell.AddCmd(&ishell.Cmd{
-		Name: "setWithTTL",
 		Help: "set value to cache with time to live",
 		Func: func(c *ishell.Context) {
-			if len(c.Args) != 3 {
-				fail("must be three values")
+			if len(c.Args) >= 2 {
+				fail("must be two or three values")
 				return
 			}
-			u, err := url.ParseRequestURI(cli.sock)
+			u, err := url.ParseRequestURI(cli.Socket())
 			if err != nil {
 				fail(err)
 				return
@@ -112,7 +94,7 @@ func main() {
 		Name: "get",
 		Help: "get value from cache",
 		Func: func(c *ishell.Context) {
-			u, err := url.ParseRequestURI(cli.sock)
+			u, err := url.ParseRequestURI(cli.Socket())
 			if err != nil {
 				fail(err)
 				return
@@ -126,33 +108,37 @@ func main() {
 			success(string(body))
 		},
 	})
-	//shell.AddCmd(&ishell.Cmd{
-	//	Name: "content",
-	//	Help: "get value content from cache",
-	//	Func: func(c *ishell.Context) {
-	//		if len(c.Args) != 2 {
-	//			c.Println("must be two values")
-	//			return
-	//		}
-	//		u, err := url.ParseRequestURI(cli.sock)
-	//		if err != nil {
-	//			c.Println(err)
-	//			return
-	//		}
-	//		q := u.Query()
-	//		q.Set("key", c.Args[0])
-	//		q.Set("content", c.Args[1])
-	//		u.RawQuery = q.Encode()
-	//		u.Path = "/api/v1/content/"
-	//		body := cli.Get(c, u.String(), "")
-	//		c.Println(string(body))
-	//	},
-	//})
+	shell.AddCmd(&ishell.Cmd{
+		Name: "content",
+		Help: "get value content from cache",
+		Func: func(c *ishell.Context) {
+			if len(c.Args) != 2 {
+				fail("must be two values")
+				return
+			}
+			u, err := url.ParseRequestURI(cli.Socket())
+			if err != nil {
+				fail(err)
+				return
+			}
+			q := u.Query()
+			q.Set("key", c.Args[0])
+			q.Set("content", c.Args[1])
+			u.RawQuery = q.Encode()
+			u.Path = "/api/v1/content/"
+			body, err := cli.Get(u.String(), "")
+			if err != nil {
+				fail(err)
+				return
+			}
+			success(string(body))
+		},
+	})
 	shell.AddCmd(&ishell.Cmd{
 		Name: "remove",
 		Help: "remove value from cache",
 		Func: func(c *ishell.Context) {
-			u, err := url.ParseRequestURI(cli.sock)
+			u, err := url.ParseRequestURI(cli.Socket())
 			if err != nil {
 				fail(err)
 				return
@@ -170,7 +156,7 @@ func main() {
 		Name: "keys",
 		Help: "get matching keys from cache",
 		Func: func(c *ishell.Context) {
-			u, err := url.ParseRequestURI(cli.sock)
+			u, err := url.ParseRequestURI(cli.Socket())
 			if err != nil {
 				fail(err)
 				return
@@ -187,6 +173,9 @@ func main() {
 	shell.Run()
 }
 
+func (c *cacheClient) Socket() string {
+	return c.sock
+}
 
 func (c *cacheClient) Post(addr string, data postItem) ([]byte, error) {
 	j, err := json.Marshal(&data)
@@ -206,7 +195,7 @@ func (c *cacheClient) Get(addr, key string) ([]byte, error) {
 		"GET",
 		fmt.Sprintf("%s%s", addr, key),
 		nil,
-		)
+	)
 	if err != nil {
 		return nil, err
 	}
