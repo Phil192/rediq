@@ -1,37 +1,29 @@
 package storage
 
 
-import "time"
-
 type cacheOpt func(o *cacheOptions)
 
 type cacheOptions struct {
 	ItemsNum uint
 	BucketsNum uint
-	TTL uint64
-	TimeUnit time.Duration
+	TTL int
 }
 
-func BucketsNum(i uint) cacheOpt {
+func ShardsNum(i uint) cacheOpt {
 	return func(o *cacheOptions) {
 		o.ItemsNum = i
 	}
 }
 
-func ItemsPerBucket(i uint) cacheOpt {
+func ItemsPerShard(i uint) cacheOpt {
 	return func(o *cacheOptions) {
 		o.BucketsNum = i
 	}
 }
 
-func DefaultTTL(i uint64) cacheOpt {
+func DefaultTTL(i int) cacheOpt {
 	return func(o *cacheOptions) {
 		o.TTL = i
 	}
 }
 
-func TimeUnit(unit time.Duration) cacheOpt {
-	return func(o *cacheOptions) {
-		o.TimeUnit = unit
-	}
-}

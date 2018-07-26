@@ -1,9 +1,9 @@
 package storage
 
 import (
-	"sync"
 	"reflect"
 	"errors"
+	log "github.com/sirupsen/logrus"
 )
 
 var ErrNotFound = errors.New("not found in cache")
@@ -24,20 +24,23 @@ type Storer interface {
 	Get(string) (*Value, error)
 	GetContent(string, interface{}) ([]byte, error)
 	Set(string, interface{}) error
-	SetWithTTL(string, interface{}, uint64) error
-	Keys(string) *sync.Map
+	SetWithTTL(string, interface{}, int) error
+	Keys(string) *[]string
 	Remove(string) error
 	Run()
 	Close()
 }
 
 type Value struct {
-	body interface{}
-	ttl  uint64
-	dataType InputType
+	Body interface{} `json:"body"`
+	TTL  int `json:"ttl"`
+	DataType InputType `json:"type"`
 }
 
-func newValue(data interface{}, ttl uint64) (*Value, error) {
+func newValue(data interface{}, ttl int) (*Value, error) {
+	if ttl < 0 {
+		return nil, ErrNegativeTTL
+	}
 	var dataType InputType
 	switch reflect.ValueOf(data).Kind() {
 	case reflect.String:
@@ -53,26 +56,23 @@ func newValue(data interface{}, ttl uint64) (*Value, error) {
 	default:
 		return nil, ErrUnknownDataType
 	}
+	if ttl == 0 {
+		log.Debugln("stored forever")
+		ttl = -1
+	}
 	v := &Value{
-		body: data,
-		ttl:  ttl,
-		dataType: dataType,
+		Body: data,
+		TTL:  ttl,
+		DataType: dataType,
 	}
 	return v, nil
 }
 
-func (v *Value) decrTTL() {
-	v.ttl -= 1
+func (v *Value) decrTTL() bool {
+	v.TTL -= 1
+	if v.TTL > 0 {
+		return true
+	}
+	return false
 }
 
-func (v *Value) TTL() uint64 {
-	return v.ttl
-}
-
-func (v *Value) Body() interface{} {
-	return v.body
-}
-
-func (v *Value) Type() InputType {
-	return v.dataType
-}

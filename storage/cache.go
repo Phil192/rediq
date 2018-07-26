@@ -12,15 +12,15 @@ import (
 
 
 type cache struct {
-	buckets map[string]*bucket
+	buckets map[string]*shard
 	GCChan  chan itemOnDelete
 	stopGC  chan struct{}
 
 	opt *cacheOptions
 }
 
-type bucket struct {
-	buckMux *sync.RWMutex
+type shard struct {
+	shMux *sync.RWMutex
 	items   map[string]*Value
 }
 
@@ -31,8 +31,7 @@ func NewCache(opts ...cacheOpt) Storer {
 		opt: &cacheOptions{
 			2048,
 			256,
-			0,
-			time.Second,
+			-1,
 		},
 	}
 	for _, o := range opts {
@@ -40,7 +39,7 @@ func NewCache(opts ...cacheOpt) Storer {
 			o(c.opt)
 		}
 	}
-	c.buckets = make(map[string]*bucket, c.opt.BucketsNum)
+	c.buckets = make(map[string]*shard, c.opt.BucketsNum)
 	return &c
 }
 
@@ -54,11 +53,11 @@ func (c *cache) GetContent(key string, subSeq interface{}) ([]byte, error) {
 		return nil, err
 	}
 	var body reflect.Value
-	switch reflect.TypeOf(item.Body()).Kind() {
+	switch reflect.TypeOf(item.Body).Kind() {
 	case reflect.Slice:
-		body = reflect.ValueOf(item.Body())
+		body = reflect.ValueOf(item.Body)
 	case reflect.Map:
-		body = reflect.ValueOf(item.Body())
+		body = reflect.ValueOf(item.Body)
 	default:
 		return nil, ErrNotSequence
 	}
@@ -75,13 +74,13 @@ func (c *cache) GetContent(key string, subSeq interface{}) ([]byte, error) {
 }
 
 func (c *cache) get(key string) (*Value, error) {
-	bucket, err := c.useBucket(key)
+	shard, err := c.useOrCreateShard(key)
 	if err != nil {
 		return nil, err
 	}
-	bucket.buckMux.RLock()
-	defer bucket.buckMux.RUnlock()
-	item, ok := bucket.items[key]
+	shard.shMux.RLock()
+	defer shard.shMux.RUnlock()
+	item, ok := shard.items[key]
 	if !ok {
 		return nil, ErrNotFound
 	}
@@ -94,7 +93,7 @@ type itemOnDelete struct {
 }
 
 func (c *cache) Set(key string, data interface{}) error {
-	bucket, err := c.useBucket(key)
+	shard, err := c.useOrCreateShard(key)
 	if err != nil {
 		return err
 	}
@@ -102,15 +101,14 @@ func (c *cache) Set(key string, data interface{}) error {
 	if err != nil {
 		return err
 	}
-	c.set(bucket, key, v)
-	if c.opt.TTL != 0 {
-		c.GCChan <- itemOnDelete{key: key, val: v}
-	}
+	c.set(shard, key, v)
+	c.GCChan <- itemOnDelete{key: key, val: v}
+
 	return nil
 }
 
-func (c *cache) SetWithTTL(key string, data interface{}, ttl uint64) error {
-	bucket, err := c.useBucket(key)
+func (c *cache) SetWithTTL(key string, data interface{}, ttl int) error {
+	shard, err := c.useOrCreateShard(key)
 	if err != nil {
 		return err
 	}
@@ -119,69 +117,80 @@ func (c *cache) SetWithTTL(key string, data interface{}, ttl uint64) error {
 	if err != nil {
 		return err
 	}
-	c.set(bucket, key, v)
-	if ttl != 0 {
-		c.GCChan <- itemOnDelete{key: key, val: v}
-	}
+	c.set(shard, key, v)
+	c.GCChan <- itemOnDelete{key: key, val: v}
+
 	return nil
 }
 
-func (c *cache) set(b *bucket, key string, v *Value) {
-	b.buckMux.Lock()
-	defer b.buckMux.Unlock()
+func (c *cache) set(b *shard, key string, v *Value) {
+	b.shMux.Lock()
+	defer b.shMux.Unlock()
 	b.items[key] = v
 	log.Debugln("set key:", key)
 }
 
 func (c *cache) Remove(key string) error {
-	bucket, err := c.useBucket(key)
+	bucket, err := c.useOrCreateShard(key)
 	if err != nil {
 		return err
 	}
-	bucket.buckMux.Lock()
-	defer bucket.buckMux.Unlock()
-	delete(bucket.items, key)
-	log.Debugln("deleted:", key, "from bucket", bucket)
+	bucket.shMux.Lock()
+	defer bucket.shMux.Unlock()
+	_, ok := bucket.items[key]
+	if ok {
+		delete(bucket.items, key)
+		log.Debugln("deleted:", key)
+	}
 	return nil
 }
 
 // https://github.com/gobwas/glob/blob/master/readme.md
 // syncmap is slow but for this method it is ok
-func (c *cache) Keys(pattern string) (*sync.Map) {
+func (c *cache) Keys(pattern string) *[]string {
+	log.Debugln("keys pattern", pattern)
 	var g glob.Glob
-	matchings := new(sync.Map)
+	matchings := make([]string, 0)
 	var wg sync.WaitGroup
 
 	g = glob.MustCompile(pattern)
 	for _, b := range c.buckets {
 		wg.Add(1)
-		go func(b *bucket) {
+		go func(b *shard) {
 			defer wg.Done()
-			for k, v := range b.items {
+			for k := range b.items {
 				if g.Match(k) {
-					matchings.Store(k, v.Body())
+					b.shMux.Lock()
+					defer b.shMux.Unlock()
+					matchings = append(matchings, k)
 				}
 			}
 		}(b)
 	}
 	wg.Wait()
-	return matchings
+	log.Debugln("keys done")
+	return &matchings
 }
 
 func (c *cache) Run() {
 	for {
 		select {
 		case item := <-c.GCChan:
+			log.Debugln("item to purge", item.val.TTL)
+			if item.val.TTL < 0 {
+				break
+			}
 			go func() {
-				for range time.Tick(c.opt.TimeUnit) {
-					item.val.decrTTL()
-					if item.val.TTL() == 0 {
+				for range time.Tick(time.Second) {
+					if ok := item.val.decrTTL(); !ok {
 						c.Remove(item.key)
 						return
 					}
+
 				}
 			}()
 		case <-c.stopGC:
+			close(c.GCChan)
 			return
 		default:
 			break
@@ -191,11 +200,10 @@ func (c *cache) Run() {
 
 func (c *cache) Close() {
 	close(c.stopGC)
-	close(c.GCChan)
 	log.Debugln("cache closed")
 }
 
-func (c *cache) useBucket(key string) (*bucket, error) {
+func (c *cache) useOrCreateShard(key string) (*shard, error) {
 	hasher := sha1.New()
 	_, err := hasher.Write([]byte(key))
 	if err != nil {
@@ -204,14 +212,14 @@ func (c *cache) useBucket(key string) (*bucket, error) {
 	bucketKey := fmt.Sprintf("%x", hasher.Sum(nil))[0:2]
 	_, ok := c.buckets[bucketKey]
 	if !ok {
-		c.newBucket(bucketKey)
+		c.newShard(bucketKey)
 	}
 	return c.buckets[bucketKey], nil
 }
 
-func (c *cache) newBucket(bucketKey string) {
-	c.buckets[bucketKey] = &bucket{
-		buckMux: new(sync.RWMutex),
+func (c *cache) newShard(bucketKey string) {
+	c.buckets[bucketKey] = &shard{
+		shMux: new(sync.RWMutex),
 		items:   make(map[string]*Value, c.opt.ItemsNum),
 	}
 }

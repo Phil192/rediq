@@ -1,44 +1,54 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
 	"github.com/rediq/rest"
 	"github.com/rediq/storage"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"os/signal"
 	"flag"
+	"io"
+	"github.com/gin-gonic/gin"
+	"fmt"
+	"crypto/sha1"
 )
 
 func main() {
 	logLevel := flag.Int("logLevel", 5, "set log level")
-	//addr := flag.String("addr", ":8080", "http server address")
-	//readTimeout := flag.Int("readTimeout", 10, "http read timeout")
-	//writeTimeout := flag.Int("writeTimeout", 10, "http write timeout")
-	//
-	//defaultTtl := flag.Int("defaultTTL", 0, "default ttl in seconds for every entry")
-	//nShards := flag.Int("shards", 1, "number of shards for concurrent writes")
-	//
-	//login := flag.String("login", "", "login for basic auth")
-	//password := flag.String("password", "", "password for basic auth")
-	//
-	//filename := flag.String("file", "", "database path")
-	//saveFreq := flag.Int("saveFreq", 500, "save to disk frequency in ms")
-	//
-	//logTo := flag.String("log", "var/cache.log", "Does not log if empty")
-
+	sock := flag.String("socket", "0.0.0.0:8081", "socket to listen")
+	defaultTtl := flag.Int("defaultTTL", 8, "default ttl in seconds for every entry")
+	shardsNum := flag.Uint("shards", 256, "number of shards")
+	itemsNum := flag.Uint("items", 2048, "number of items in single shard")
+	output := flag.Bool("stdout", false, "stdout or log")
+	logTo := flag.String("log", "./var/cache.log", "log file")
+	login := flag.String("login", "", "login for basic auth")
+	pass := flag.String("password", "", "password for basic auth")
 	flag.Parse()
 
+	var f io.Writer
+	var err error
 	log.SetLevel(log.Level(*logLevel))
-	f, err := os.OpenFile("./var/rediq.log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
-	if err != nil {
-		log.Warningln(err)
+
+	if *output {
+		f, err = os.OpenFile(*logTo, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0755)
+		if err != nil {
+			log.Warningln(err)
+		}
+		log.SetOutput(f)
 	}
-	log.SetOutput(f)
+	c := storage.NewCache(
+		storage.DefaultTTL(*defaultTtl),
+		storage.ShardsNum(*shardsNum),
+		storage.ItemsPerShard(*itemsNum),
+		)
+	go c.Run()
+	aaa := make(map[string]string, 0)
+	aaa["adad"] = "aaaaa"
+	c.Set("test", aaa)
+
+	fmt.Println(c.Keys("*"))
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
-
-	c := storage.NewCache(storage.DefaultTTL(8))
 	go func() {
 		for {
 			select {
@@ -48,9 +58,15 @@ func main() {
 			}
 		}
 	}()
+	hasher := sha1.New()
+	_, err = hasher.Write([]byte(*login + *pass))
+	if err != nil {
+		log.Fatalln(err)
+	}
+	os.Setenv("token", fmt.Sprintf("%x", hasher.Sum(nil)))
 	a := rest.NewApp(c, f)
-	a.RouteAPI(gin.Context{})
-	if err := a.ListenAndServe("localhost:8081"); err != nil {
+	a.RouteAPI(gin.Default())
+	if err := a.ListenAndServe(*sock); err != nil {
 		log.Fatalf("listen: %s\n", err)
 
 	}
