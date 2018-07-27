@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"strconv"
 	"time"
+	"net/http"
 )
 
 type application struct {
@@ -39,7 +40,6 @@ func (a *application) RouteAPI(r *gin.Engine) {
 	r.DELETE("/api/v1/remove/:key", TokenAuthMiddleware(), a.DeleteHandler)
 	r.GET("/api/v1/keys/:key", TokenAuthMiddleware(), a.KeysHandler)
 	r.GET("/api/v1/getby/", TokenAuthMiddleware(), a.GetByHandler)
-
 	a.mux = r
 }
 
@@ -55,39 +55,39 @@ func (a *application) SetHandler(c *gin.Context) {
 
 	data, err := ioutil.ReadAll(body)
 	if err != nil {
-		c.AbortWithError(500, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 	if err := json.Unmarshal(data, &item); err != nil {
-		c.AbortWithError(500, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 	if item.Key == "" || item.Value == "" {
-		c.AbortWithStatus(400)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	if err := a.cache.Set(item.Key, item.Value, item.TTL); err != nil {
-		c.AbortWithError(500, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	c.String(200, c.Request.Host, fmt.Sprintf("/api/v1/get/%s", item.Key))
+	c.String(http.StatusOK, fmt.Sprintf("/api/v1/get/%s", item.Key))
 }
 
 func (a *application) GetHandler(c *gin.Context) {
 	key := c.Param("key")
 	if key == "" {
-		c.AbortWithStatus(400)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	val, err := a.cache.Get(key)
 	if err == storage.ErrNotFound {
-		c.AbortWithError(404, err)
+		c.AbortWithError(http.StatusNotFound, err)
 		return
 	} else if err != nil {
-		c.AbortWithError(500, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(200, val)
+	c.JSON(http.StatusOK, val)
 }
 
 func (a *application) GetByHandler(c *gin.Context) {
@@ -96,18 +96,18 @@ func (a *application) GetByHandler(c *gin.Context) {
 
 	key := c.Query("key")
 	if key == "" {
-		c.AbortWithStatus(400)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	index := c.Query("index")
 	if index == "" {
-		c.AbortWithStatus(400)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	indexInt, err := strconv.Atoi(index)
 	if err == nil {
 		if indexInt < 0 {
-			c.AbortWithError(400, storage.ErrSubSeqType)
+			c.AbortWithError(http.StatusBadRequest, storage.ErrSubSeqType)
 			return
 		}
 		resp, err = a.cache.GetBy(key, indexInt)
@@ -115,38 +115,38 @@ func (a *application) GetByHandler(c *gin.Context) {
 		resp, err = a.cache.GetBy(key, index)
 	}
 	if err == storage.ErrSubSeqType {
-		c.AbortWithStatus(400)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	} else if err != nil {
-		c.AbortWithError(500, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	c.JSON(200, resp)
+	c.JSON(http.StatusOK, resp)
 }
 
 func (a *application) DeleteHandler(c *gin.Context) {
 	key := c.Param("key")
 	if key == "" {
-		c.AbortWithStatus(400)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	if err := a.cache.Remove(key); err != nil {
-		c.AbortWithError(500, err)
+		c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
-	c.Status(200)
+	c.Status(http.StatusOK)
 }
 
 func (a *application) KeysHandler(c *gin.Context) {
 	key := c.Param("key")
 	if key == "" {
-		c.AbortWithStatus(400)
+		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	matchings := a.cache.Keys(key)
 	if len(matchings) == 0 {
-		c.AbortWithStatus(404)
+		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
-	c.JSON(200, matchings)
+	c.JSON(http.StatusOK, matchings)
 }

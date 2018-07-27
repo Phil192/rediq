@@ -33,7 +33,7 @@ func (s *shard) MarshalJSON() ([]byte, error) {
 
 func (s *shard) UnmarshalJSON(b []byte) error {
 	s.shMux = new(sync.RWMutex)
-	s.items = make(map[string]*Value, 0)
+	s.items = make(map[string]*Value, 0) // idk for now how to detect shard len from damp
 	err := json.Unmarshal(b, &s.items)
 	if err != nil {
 		return err

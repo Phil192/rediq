@@ -97,7 +97,6 @@ func (c *cache) Set(key string, data interface{}, ttl time.Duration) error {
 	if err != nil {
 		return err
 	}
-
 	v, err := newValue(data, ttl)
 	if err != nil {
 		return err
@@ -226,7 +225,6 @@ func (c *cache) doExpiration() {
 						c.Remove(item.key)
 						return
 					}
-
 				}
 			}()
 		case <-interrupt:

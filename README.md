@@ -26,7 +26,6 @@
 
 Кэш сервер создается с следующими параметрами коммандной строки:
 ```
-defaultTTL   int                - TTL, выставляемый кэшу по умолчанию
 logLevel     int                - уровень детализации логирования
 socket       string             - сокет, который слушает сервер кэша
 log          string             - путь к файлу для лога
@@ -44,16 +43,14 @@ type     InputType int
 ```
 API поддерживает следующие методы:
 ```
-Set(string, interface{}) (error)
-SetWithTTL(string, interface{}, int) (error)
+Set(string, interface{}, int) (error)
 Get(string) (*Value, error)
 Remove(key string) (error)
 Keys() ([]string)
-GetContent(string, interface{}) (string, error)
+GetBy(string, interface{}) (interface{}, error)
 ```
 Кэш создается методом NewCache, принимающий параметры:
 ```
-DefaultTTL     int               - TTL, выставляемый ключу по умолчанию
 ShardsNum      int               - максимальное число шардов, по умолчанию 256
 ItemsPerShard  int               - максимальное число элементов в шарде, по умолчанию 2048
 DumpPath       int               - путь к файлу дампа кэша
@@ -79,25 +76,24 @@ REST API принимает и возвращает данные в формат
 Все URL начинаются с /api/v1
 ```
 
-| Хэндлер               | Метод  | Url                  | Body                                                         | Пример успешного ответа         | Пример ошибки                                                    |
-|-----------------------|--------|----------------------|--------------------------------------------------------------|----------------------------------|------------------------------------------------------------------|
-| Keys                  | GET    | /keys/:key           | --                                                           | ["test","tist","tost"]           | --                                                               |
-| Get                   | GET    | /get/:key            | --                                                           | [{"body":"123","ttl":2,"type":0} | {"error": "not found in cache"}                                  |
-| GetContent            | GET    | /get/?key=&content=  | --                                                           |                                  | {"error": "cant get item at index"}                              |
-| Remove                | DELETE | /remove/:key         | --                                                           | "OK"                             | --                                                               |
-| Set                   | POST   | /set                 | {"key":"123","value":"3","ttl":0}                            | [0.0.0.0:8081/api/v1/get/123]    | {"error":"invalid character 'a' looking for beginning of value"} |
-| SetWithTTL            | POST   | /setWithTTL          | {"key":"123","value":"3","ttl":5}                            | [0.0.0.0:8081/api/v1/get/123]    | {"error":"Bad request"}                                          |
+| Хэндлер  | Метод  | Url                  | Body                               | Пример успешного ответа          | Пример ошибки                                                    |
+|----------|--------|----------------------|------------------------------------|----------------------------------|------------------------------------------------------------------|
+| Keys     | GET    | /keys/:key           | --                                 | ["test","tist","tost"]           | --                                                               |
+| Get      | GET    | /get/:key            | --                                 | [{"body":"123","ttl":2,"type":0}]| {"error": "not found in cache"}                                  |
+| GetBy    | GET    | /getby/?key=&index=  | --                                 | ["ok"]                           | {"error": "cant get item at index"}                              |
+| Remove   | DELETE | /remove/:key         | --                                 | "OK"                             | --                                                               |
+| Set      | POST   | /set                 | {"key":"123","value":"3","ttl":0}  | [0.0.0.0:8081/api/v1/get/123]    | {"error":"invalid character 'a' looking for beginning of value"} |
 
 ```
 REST HTTP интерактивный клиент реализует интерфейс Cache.
 Интерактивная оболочка реализована с помощью ishell.
 Доступны команды:
 ```
-set
-get
-content
-remove
-keys
+set    <key> <value> <ttl>
+get    <key>
+getby  <key> <index>
+remove <key>
+keys   <mask>
 ```
 
 ## Развертывание
@@ -126,7 +122,7 @@ go get -u github.com/phil192/rediq
 Все тесты успешны.
 
 ## Гонка данных
-Go build -race успешен.
+go build -race успешен.
 
 ## Нагрузочное тестирование:
 Выполнено для самого "тяжелого" метода (за исключением метода Keys, который априори "тяжелый").

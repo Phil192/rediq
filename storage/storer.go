@@ -34,7 +34,7 @@ type Storer interface {
 type Value struct {
 	Body     interface{}   `json:"body"`
 	TTL      time.Duration `json:"ttl"`
-	DataType InputType     `json:"type"`
+	DataType InputType     `json:"-"`
 }
 
 func newValue(data interface{}, ttl time.Duration) (*Value, error) {
@@ -66,8 +66,5 @@ func newValue(data interface{}, ttl time.Duration) (*Value, error) {
 
 func (v *Value) decrTTL() bool {
 	v.TTL -= 1 * time.Second
-	if v.TTL > 0 {
-		return true
-	}
-	return false
+	return v.TTL > 0
 }

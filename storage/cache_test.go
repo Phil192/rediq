@@ -54,7 +54,7 @@ func TestSetString(t *testing.T) {
 	r := require.New(t)
 	err := myCache.Set("testSetString", "test", 1)
 	r.NoError(err)
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 2) // TODO mock it!
 	_, err = myCache.Get("testSetString")
 	r.Error(err)
 }
