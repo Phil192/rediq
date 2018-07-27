@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 type User interface {
@@ -38,9 +39,9 @@ func newClient(sock, lgn, pass string) User {
 }
 
 type postItem struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-	TTL   int    `json:"ttl"`
+	Key   string        `json:"key"`
+	Value string        `json:"value"`
+	TTL   time.Duration `json:"ttl"`
 }
 
 func main() {
@@ -81,7 +82,7 @@ func main() {
 				fail(err)
 				return
 			}
-			data := postItem{c.Args[0], c.Args[1], ttl}
+			data := postItem{c.Args[0], c.Args[1], time.Duration(ttl) * time.Second}
 			body, err := cli.Post(u.String(), data)
 			if err != nil {
 				fail(err)
@@ -109,8 +110,8 @@ func main() {
 		},
 	})
 	shell.AddCmd(&ishell.Cmd{
-		Name: "content",
-		Help: "get value content from cache",
+		Name: "getby",
+		Help: "get value by index (int or string)",
 		Func: func(c *ishell.Context) {
 			if len(c.Args) != 2 {
 				fail("must be two values")
@@ -123,9 +124,9 @@ func main() {
 			}
 			q := u.Query()
 			q.Set("key", c.Args[0])
-			q.Set("content", c.Args[1])
+			q.Set("index", c.Args[1])
 			u.RawQuery = q.Encode()
-			u.Path = "/api/v1/content/"
+			u.Path = "/api/v1/getby/"
 			body, err := cli.Get(u.String(), "")
 			if err != nil {
 				fail(err)

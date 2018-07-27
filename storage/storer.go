@@ -2,8 +2,8 @@ package storage
 
 import (
 	"errors"
-	log "github.com/sirupsen/logrus"
 	"reflect"
+	"time"
 )
 
 var ErrNotFound = errors.New("not found in cache")
@@ -23,9 +23,8 @@ const (
 
 type Storer interface {
 	Get(string) (*Value, error)
-	GetContent(string, interface{}) (string, error)
-	Set(string, interface{}) error
-	SetWithTTL(string, interface{}, int) error
+	GetBy(string, interface{}) (interface{}, error)
+	Set(string, interface{}, time.Duration) error
 	Keys(string) []string
 	Remove(string) error
 	Run()
@@ -33,12 +32,12 @@ type Storer interface {
 }
 
 type Value struct {
-	Body     interface{} `json:"body"`
-	TTL      int         `json:"ttl"`
-	DataType InputType   `json:"type"`
+	Body     interface{}   `json:"body"`
+	TTL      time.Duration `json:"ttl"`
+	DataType InputType     `json:"type"`
 }
 
-func newValue(data interface{}, ttl int) (*Value, error) {
+func newValue(data interface{}, ttl time.Duration) (*Value, error) {
 	if ttl < 0 {
 		return nil, ErrNegativeTTL
 	}
@@ -57,10 +56,6 @@ func newValue(data interface{}, ttl int) (*Value, error) {
 	default:
 		return nil, ErrUnknownDataType
 	}
-	if ttl == 0 {
-		log.Debugln("stored forever")
-		ttl = -1
-	}
 	v := &Value{
 		Body:     data,
 		TTL:      ttl,
@@ -70,7 +65,7 @@ func newValue(data interface{}, ttl int) (*Value, error) {
 }
 
 func (v *Value) decrTTL() bool {
-	v.TTL -= 1
+	v.TTL -= 1 * time.Second
 	if v.TTL > 0 {
 		return true
 	}

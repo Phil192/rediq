@@ -1,18 +1,19 @@
 package rest
 
 import (
-	"testing"
-	"github.com/stretchr/testify/require"
-	"net/http"
-	"fmt"
-	"os"
-	"github.com/rediq/storage"
-	"github.com/gin-gonic/gin"
-	"log"
-	"io"
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/rediq/storage"
+	"github.com/stretchr/testify/require"
+	"io"
 	"io/ioutil"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"testing"
 	"time"
 )
 
@@ -24,7 +25,6 @@ func init() {
 func TestMain(m *testing.M) {
 	var f io.Writer
 	myCache := storage.NewCache(
-		storage.DefaultTTL(1),
 		storage.DumpPath("./var/cache.dump"),
 	)
 	myCache.Run()
@@ -39,12 +39,11 @@ func TestMain(m *testing.M) {
 			log.Fatalf("listen: %s\n", err)
 		}
 	}()
-	time.Sleep(3*time.Second)
+	time.Sleep(3 * time.Second)
 	code := m.Run()
 	myCache.Close()
 	os.Exit(code)
 }
-
 
 func TestPing(t *testing.T) {
 	r := require.New(t)
@@ -74,41 +73,58 @@ func TestGet(t *testing.T) {
 	r.Contains(string(bts), "ok")
 }
 
-func TestSet(t *testing.T) {
+func TestGetBy(t *testing.T) {
 	r := require.New(t)
-	data := postItem{"testSet", "ok", 0}
+	var innerArr = []string{"ok"}
+	data := postItem{"testGetBy", innerArr, 5}
 	j, err := json.Marshal(&data)
 	r.NoError(err)
 	resp, err := http.Post(
 		fmt.Sprintf("http://%s/api/v1/set", socket),
 		"application/json",
 		bytes.NewBuffer(j),
-		)
-	r.NoError(err)
-	r.Equal(200, resp.StatusCode)
-}
-
-func TestSetWithTTL(t *testing.T) {
-	r := require.New(t)
-	data := postItem{"testSetTTL", "ok", 2}
-	j, err := json.Marshal(&data)
-	r.NoError(err)
-	resp, err := http.Post(
-		fmt.Sprintf("http://%s/api/v1/setWithTTL", socket),
-		"application/json",
-		bytes.NewBuffer(j),
 	)
 	r.NoError(err)
 	r.Equal(200, resp.StatusCode)
-	resp, err = http.Get(fmt.Sprintf("http://%s/api/v1/get/testSetTTL", socket))
+	u, err := url.ParseRequestURI("http://" + socket)
+	r.NoError(err)
+	q := u.Query()
+	q.Set("key", "testGetBy")
+	q.Set("index", "0")
+	u.RawQuery = q.Encode()
+	u.Path = "/api/v1/getby/"
+	r.NoError(err)
+	r.Equal(200, resp.StatusCode)
+	resp, err = http.Get(u.String())
 	r.NoError(err)
 	r.Equal(200, resp.StatusCode)
 	bts, err := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	r.NoError(err)
-	r.Contains( string(bts), "ok")
-	time.Sleep(3*time.Second)
-	resp, err = http.Get(fmt.Sprintf("http://%s/api/v1/get/testSetTTL", socket))
+	r.Contains(string(bts), "ok")
+}
+
+func TestSet(t *testing.T) {
+	r := require.New(t)
+	data := postItem{"testSet", "ok", 2}
+	j, err := json.Marshal(&data)
+	r.NoError(err)
+	resp, err := http.Post(
+		fmt.Sprintf("http://%s/api/v1/set", socket),
+		"application/json",
+		bytes.NewBuffer(j),
+	)
+	r.NoError(err)
+	r.Equal(200, resp.StatusCode)
+	resp, err = http.Get(fmt.Sprintf("http://%s/api/v1/get/testSet", socket))
+	r.NoError(err)
+	r.Equal(200, resp.StatusCode)
+	bts, err := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	r.NoError(err)
+	r.Contains(string(bts), "ok")
+	time.Sleep(3 * time.Second)
+	resp, err = http.Get(fmt.Sprintf("http://%s/api/v1/get/testSet", socket))
 	r.NoError(err)
 	r.Equal(404, resp.StatusCode)
 }

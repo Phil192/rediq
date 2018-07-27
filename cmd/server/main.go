@@ -19,7 +19,6 @@ func main() {
 
 	logLevel := flag.Int("logLevel", 5, "set log level")
 	sock := flag.String("socket", "0.0.0.0:8081", "socket to listen")
-	defaultTtl := flag.Int("defaultTTL", 4, "default ttl in seconds for every entry")
 	shardsNum := flag.Uint("shards", 256, "max number of shards")
 	itemsNum := flag.Uint("items", 2048, "max number of items in single shard")
 	output := flag.Bool("stdout", false, "stdout or log")
@@ -37,15 +36,14 @@ func main() {
 		log.SetOutput(f)
 	}
 	c := storage.NewCache(
-		storage.DefaultTTL(*defaultTtl),
 		storage.ShardsNum(*shardsNum),
 		storage.ItemsPerShard(*itemsNum),
 		storage.DumpPath(*dump),
 	)
 	c.Run()
-	if err := checkEnvToken(); err != nil {
-		log.Fatalln(err)
-	}
+	//if err := checkEnvToken(); err != nil {
+	//	log.Fatalln(err)
+	//}
 	app := rest.NewApp(
 		c,
 		rest.LogFile(f),

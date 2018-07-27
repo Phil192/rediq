@@ -7,6 +7,7 @@ import (
 	"github.com/rediq/storage"
 	"io/ioutil"
 	"strconv"
+	"time"
 )
 
 type application struct {
@@ -34,17 +35,18 @@ func (a *application) ListenAndServe() error {
 
 func (a *application) RouteAPI(r *gin.Engine) {
 	r.POST("/api/v1/set", TokenAuthMiddleware(), a.SetHandler)
-	r.POST("/api/v1/setWithTTL", TokenAuthMiddleware(), a.SetWithTTLHandler)
 	r.GET("/api/v1/get/:key", TokenAuthMiddleware(), a.GetHandler)
 	r.DELETE("/api/v1/remove/:key", TokenAuthMiddleware(), a.DeleteHandler)
 	r.GET("/api/v1/keys/:key", TokenAuthMiddleware(), a.KeysHandler)
+	r.GET("/api/v1/getby/", TokenAuthMiddleware(), a.GetByHandler)
+
 	a.mux = r
 }
 
 type postItem struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-	TTL   int    `json:"ttl"`
+	Key   string        `json:"key"`
+	Value interface{}   `json:"value"`
+	TTL   time.Duration `json:"ttl"`
 }
 
 func (a *application) SetHandler(c *gin.Context) {
@@ -64,31 +66,7 @@ func (a *application) SetHandler(c *gin.Context) {
 		c.AbortWithStatus(400)
 		return
 	}
-	if err := a.cache.Set(item.Key, item.Value); err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-	c.String(200, fmt.Sprintf("%s/api/v1/get/%s", c.Request.Host, item.Key))
-}
-
-func (a *application) SetWithTTLHandler(c *gin.Context) {
-	var item postItem
-	body := c.Request.Body
-
-	data, err := ioutil.ReadAll(body)
-	if err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-	if err := json.Unmarshal(data, &item); err != nil {
-		c.AbortWithError(500, err)
-		return
-	}
-	if item.Key == "" || item.Value == "" {
-		c.AbortWithStatus(400)
-		return
-	}
-	if err := a.cache.SetWithTTL(item.Key, item.Value, item.TTL); err != nil {
+	if err := a.cache.Set(item.Key, item.Value, item.TTL); err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
@@ -112,8 +90,8 @@ func (a *application) GetHandler(c *gin.Context) {
 	c.JSON(200, val)
 }
 
-func (a *application) GetContentHandler(c *gin.Context) {
-	var resp string
+func (a *application) GetByHandler(c *gin.Context) {
+	var resp interface{}
 	var err error
 
 	key := c.Query("key")
@@ -121,20 +99,20 @@ func (a *application) GetContentHandler(c *gin.Context) {
 		c.AbortWithStatus(400)
 		return
 	}
-	content := c.Query("content")
-	if content == "" {
+	index := c.Query("index")
+	if index == "" {
 		c.AbortWithStatus(400)
 		return
 	}
-	index, err := strconv.Atoi(content)
+	indexInt, err := strconv.Atoi(index)
 	if err == nil {
-		if index < 0 {
+		if indexInt < 0 {
 			c.AbortWithError(400, storage.ErrSubSeqType)
 			return
 		}
-		resp, err = a.cache.GetContent(key, index)
+		resp, err = a.cache.GetBy(key, indexInt)
 	} else {
-		resp, err = a.cache.GetContent(key, content)
+		resp, err = a.cache.GetBy(key, index)
 	}
 	if err == storage.ErrSubSeqType {
 		c.AbortWithStatus(400)
@@ -143,9 +121,8 @@ func (a *application) GetContentHandler(c *gin.Context) {
 		c.AbortWithError(500, err)
 		return
 	}
-	c.JSON(200, gin.H{"content": string(resp)})
+	c.JSON(200, resp)
 }
-
 
 func (a *application) DeleteHandler(c *gin.Context) {
 	key := c.Param("key")

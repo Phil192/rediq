@@ -10,10 +10,10 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
-	"strings"
 )
 
 type cache struct {
@@ -31,7 +31,6 @@ func NewCache(opts ...cacheOpt) Storer {
 		opt: &cacheOptions{
 			2048,
 			256,
-			-1,
 			".",
 		},
 	}
@@ -48,10 +47,10 @@ func (c *cache) Get(key string) (*Value, error) {
 	return c.get(key)
 }
 
-func (c *cache) GetContent(key string, subSeq interface{}) (string, error) {
+func (c *cache) GetBy(key string, subSeq interface{}) (interface{}, error) {
 	item, err := c.get(key)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var body reflect.Value
 	switch reflect.TypeOf(item.Body).Kind() {
@@ -60,17 +59,17 @@ func (c *cache) GetContent(key string, subSeq interface{}) (string, error) {
 	case reflect.Map:
 		body = reflect.ValueOf(item.Body)
 	default:
-		return "", ErrNotSequence
+		return nil, ErrNotSequence
 	}
 	switch reflect.TypeOf(subSeq).Kind() {
 	case reflect.Uint, reflect.Int:
 		ss := reflect.ValueOf(subSeq)
 		subKey := ss.Int()
-		return body.Index(int(subKey)).String(), nil
+		return body.Index(int(subKey)).Interface(), nil
 	case reflect.String:
-		return body.MapIndex(reflect.ValueOf(subSeq)).String(), nil
+		return body.MapIndex(reflect.ValueOf(subSeq)).Interface(), nil
 	default:
-		return "", ErrSubSeqType
+		return nil, ErrSubSeqType
 	}
 }
 
@@ -93,21 +92,7 @@ type itemOnDelete struct {
 	val *Value
 }
 
-func (c *cache) Set(key string, data interface{}) error {
-	shard, _, err := c.getOrCreateShard(key)
-	if err != nil {
-		return err
-	}
-	v, err := newValue(data, c.opt.TTL)
-	if err != nil {
-		return err
-	}
-	c.set(shard, key, v)
-	c.GCChan <- itemOnDelete{key: key, val: v}
-	return nil
-}
-
-func (c *cache) SetWithTTL(key string, data interface{}, ttl int) error {
+func (c *cache) Set(key string, data interface{}, ttl time.Duration) error {
 	shard, _, err := c.getOrCreateShard(key)
 	if err != nil {
 		return err
@@ -232,7 +217,7 @@ func (c *cache) doExpiration() {
 		select {
 		case item := <-c.GCChan:
 			log.Debugln("item to purge", item.key, "time", item.val.TTL)
-			if item.val.TTL < 0 {
+			if item.val.TTL == 0 {
 				break
 			}
 			go func() {
