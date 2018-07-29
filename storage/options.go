@@ -6,6 +6,7 @@ type cacheOptions struct {
 	ItemsNum   uint
 	BucketsNum uint
 	DumpPath   string
+	GCCap      int
 }
 
 func ShardsNum(i uint) cacheOpt {
@@ -23,5 +24,11 @@ func ItemsPerShard(i uint) cacheOpt {
 func DumpPath(path string) cacheOpt {
 	return func(o *cacheOptions) {
 		o.DumpPath = path
+	}
+}
+
+func GCCap(i int) cacheOpt {
+	return func(o *cacheOptions) {
+		o.GCCap = i
 	}
 }

@@ -6,9 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/phil192/rediq/storage"
 	"io/ioutil"
+	"net/http"
 	"strconv"
 	"time"
-	"net/http"
 )
 
 type application struct {

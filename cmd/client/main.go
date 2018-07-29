@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/abiosoft/ishell"
 	"github.com/fatih/color"
-	"github.com/rediq/client"
+	"github.com/phil192/rediq/client"
 	"net/url"
 	"strconv"
 	"time"
@@ -139,7 +139,6 @@ func main() {
 	})
 	shell.Run()
 }
-
 
 func fail(a ...interface{}) {
 	r := color.New(color.FgRed).SprintFunc()

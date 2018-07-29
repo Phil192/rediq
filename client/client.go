@@ -1,13 +1,13 @@
 package client
 
 import (
-	"time"
-	"encoding/json"
-	"net/http"
 	"bytes"
-	"fmt"
 	"crypto/sha1"
+	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"net/http"
+	"time"
 )
 
 type postItem struct {

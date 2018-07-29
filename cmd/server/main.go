@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 	"github.com/phil192/rediq/rest"
 	"github.com/phil192/rediq/storage"
+	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
@@ -19,6 +19,7 @@ func main() {
 
 	logLevel := flag.Int("logLevel", 5, "set log level")
 	sock := flag.String("socket", "0.0.0.0:8081", "socket to listen")
+	gcCap := flag.Int("gccap", 128, "buffer size of gc channel")
 	shardsNum := flag.Uint("shards", 256, "max number of shards")
 	itemsNum := flag.Uint("items", 2048, "max number of items in single shard")
 	output := flag.Bool("stdout", false, "stdout or log")
@@ -39,6 +40,7 @@ func main() {
 		storage.ShardsNum(*shardsNum),
 		storage.ItemsPerShard(*itemsNum),
 		storage.DumpPath(*dump),
+		storage.GCCap(*gcCap),
 	)
 	c.Run()
 	//if err := checkEnvToken(); err != nil {

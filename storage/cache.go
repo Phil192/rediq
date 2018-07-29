@@ -26,12 +26,12 @@ type cache struct {
 
 func NewCache(opts ...cacheOpt) Storer {
 	c := cache{
-		GCChan: make(chan itemOnDelete, 256),
 		stopGC: make(chan struct{}),
 		opt: &cacheOptions{
 			2048,
 			256,
 			".",
+			64,
 		},
 	}
 	for _, o := range opts {
@@ -39,6 +39,7 @@ func NewCache(opts ...cacheOpt) Storer {
 			o(c.opt)
 		}
 	}
+	c.GCChan = make(chan itemOnDelete, c.opt.GCCap)
 	c.shards = make(map[string]*shard, c.opt.BucketsNum)
 	return &c
 }
