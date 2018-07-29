@@ -13,7 +13,7 @@ func TokenAuthMiddleware() gin.HandlerFunc {
 				c.AbortWithStatus(401)
 				return
 			}
-			if os.Getenv("token") != token {
+			if os.Getenv("TOKEN") != token {
 				c.AbortWithStatus(401)
 				return
 			}

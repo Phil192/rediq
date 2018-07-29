@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/rediq/storage"
+	"github.com/phil192/rediq/storage"
 	"github.com/stretchr/testify/require"
 	"io"
 	"io/ioutil"

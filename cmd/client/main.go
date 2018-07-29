@@ -12,8 +12,8 @@ import (
 )
 
 func main() {
-	login := flag.String("login", "", "login for basic auth")
-	password := flag.String("password", "", "password for basic auth")
+	login := flag.String("login", "login", "login for basic auth")
+	password := flag.String("password", "password", "password for basic auth")
 	sock := flag.String("socket", "http://0.0.0.0:8081", "socket to request")
 	flag.Parse()
 

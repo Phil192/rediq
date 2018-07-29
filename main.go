@@ -43,9 +43,9 @@ func main() {
 		storage.GCCap(*gcCap),
 	)
 	c.Run()
-	//if err := checkEnvToken(); err != nil {
-	//	log.Fatalln(err)
-	//}
+	if err := checkEnvToken(); err != nil {
+		log.Fatalln(err)
+	}
 	app := rest.NewApp(
 		c,
 		rest.LogFile(f),
@@ -58,7 +58,8 @@ func main() {
 }
 
 func checkEnvToken() error {
-	token := os.Getenv("token")
+	// default: sha1("login" + "password")
+	token := os.Getenv("TOKEN")
 	if token == "" {
 		return ErrTokenNotFound
 	}

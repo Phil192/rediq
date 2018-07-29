@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"reflect"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -168,7 +167,7 @@ func (c *cache) readDump() {
 	defer os.Remove(c.opt.DumpPath)
 	data, err := ioutil.ReadFile(c.opt.DumpPath)
 	if err != nil {
-		if strings.Contains(err.Error(), "no such file or directory") {
+		if os.IsNotExist(err) {
 			return
 		}
 		log.Warningln("fail to read dumped data:", err)
