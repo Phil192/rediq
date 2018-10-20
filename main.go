@@ -2,9 +2,9 @@ package main
 
 import (
 	"flag"
+	"github.com/Phil192/rediq/rest"
+	"github.com/Phil192/rediq/storage"
 	"github.com/gin-gonic/gin"
-	"github.com/phil192/rediq/rest"
-	"github.com/phil192/rediq/storage"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"io"
@@ -43,9 +43,11 @@ func main() {
 		storage.GCCap(*gcCap),
 	)
 	c.Run()
+
 	if err := checkEnvToken(); err != nil {
 		log.Fatalln(err)
 	}
+
 	app := rest.NewApp(
 		c,
 		rest.LogFile(f),

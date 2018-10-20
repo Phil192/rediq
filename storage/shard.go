@@ -8,7 +8,7 @@ import (
 )
 
 type shard struct {
-	shMux *sync.RWMutex
+	shMux sync.RWMutex
 	items map[string]*Value
 }
 
@@ -32,7 +32,7 @@ func (s *shard) MarshalJSON() ([]byte, error) {
 }
 
 func (s *shard) UnmarshalJSON(b []byte) error {
-	s.shMux = new(sync.RWMutex)
+	s.shMux = sync.RWMutex{}
 	s.items = make(map[string]*Value, 0) // idk for now how to detect shard len from damp
 	err := json.Unmarshal(b, &s.items)
 	if err != nil {

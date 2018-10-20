@@ -3,8 +3,8 @@ package rest
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/Phil192/rediq/storage"
 	"github.com/gin-gonic/gin"
-	"github.com/phil192/rediq/storage"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -35,11 +35,11 @@ func (a *application) ListenAndServe() error {
 }
 
 func (a *application) RouteAPI(r *gin.Engine) {
-	r.POST("/api/v1/set", TokenAuthMiddleware(), a.SetHandler)
-	r.GET("/api/v1/get/:key", TokenAuthMiddleware(), a.GetHandler)
-	r.DELETE("/api/v1/remove/:key", TokenAuthMiddleware(), a.DeleteHandler)
-	r.GET("/api/v1/keys/:key", TokenAuthMiddleware(), a.KeysHandler)
-	r.GET("/api/v1/getby/", TokenAuthMiddleware(), a.GetByHandler)
+	r.POST("/api/v1/set", TokenAuthMiddleware(), a.setHandler)
+	r.GET("/api/v1/get/:key", TokenAuthMiddleware(), a.getHandler)
+	r.DELETE("/api/v1/remove/:key", TokenAuthMiddleware(), a.deleteHandler)
+	r.GET("/api/v1/keys/:key", TokenAuthMiddleware(), a.keysHandler)
+	r.GET("/api/v1/getby/", TokenAuthMiddleware(), a.getByHandler)
 	a.mux = r
 }
 
@@ -49,7 +49,7 @@ type postItem struct {
 	TTL   time.Duration `json:"ttl"`
 }
 
-func (a *application) SetHandler(c *gin.Context) {
+func (a *application) setHandler(c *gin.Context) {
 	var item postItem
 	body := c.Request.Body
 
@@ -73,7 +73,7 @@ func (a *application) SetHandler(c *gin.Context) {
 	c.String(http.StatusOK, fmt.Sprintf("/api/v1/get/%s", item.Key))
 }
 
-func (a *application) GetHandler(c *gin.Context) {
+func (a *application) getHandler(c *gin.Context) {
 	key := c.Param("key")
 	if key == "" {
 		c.AbortWithStatus(http.StatusBadRequest)
@@ -90,7 +90,7 @@ func (a *application) GetHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, val)
 }
 
-func (a *application) GetByHandler(c *gin.Context) {
+func (a *application) getByHandler(c *gin.Context) {
 	var resp interface{}
 	var err error
 
@@ -124,7 +124,7 @@ func (a *application) GetByHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-func (a *application) DeleteHandler(c *gin.Context) {
+func (a *application) deleteHandler(c *gin.Context) {
 	key := c.Param("key")
 	if key == "" {
 		c.AbortWithStatus(http.StatusBadRequest)
@@ -137,7 +137,7 @@ func (a *application) DeleteHandler(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-func (a *application) KeysHandler(c *gin.Context) {
+func (a *application) keysHandler(c *gin.Context) {
 	key := c.Param("key")
 	if key == "" {
 		c.AbortWithStatus(http.StatusBadRequest)

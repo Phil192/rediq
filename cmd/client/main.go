@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/Phil192/rediq/client"
 	"github.com/abiosoft/ishell"
 	"github.com/fatih/color"
-	"github.com/phil192/rediq/client"
 	"net/url"
 	"strconv"
 	"time"

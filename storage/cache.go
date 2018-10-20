@@ -16,8 +16,10 @@ import (
 )
 
 type cache struct {
+	mx     sync.Mutex
 	shards map[string]*shard
-	GCChan chan itemOnDelete
+
+	gcChan chan itemOnDelete
 	stopGC chan struct{}
 
 	opt *cacheOptions
@@ -25,6 +27,7 @@ type cache struct {
 
 func NewCache(opts ...cacheOpt) Storer {
 	c := cache{
+		mx:     sync.Mutex{},
 		stopGC: make(chan struct{}),
 		opt: &cacheOptions{
 			2048,
@@ -38,7 +41,7 @@ func NewCache(opts ...cacheOpt) Storer {
 			o(c.opt)
 		}
 	}
-	c.GCChan = make(chan itemOnDelete, c.opt.GCCap)
+	c.gcChan = make(chan itemOnDelete, c.opt.GCCap)
 	c.shards = make(map[string]*shard, c.opt.BucketsNum)
 	return &c
 }
@@ -102,7 +105,7 @@ func (c *cache) Set(key string, data interface{}, ttl time.Duration) error {
 		return err
 	}
 	c.set(shard, key, v)
-	c.GCChan <- itemOnDelete{key: key, val: v}
+	c.gcChan <- itemOnDelete{key: key, val: v}
 	return nil
 }
 
@@ -147,8 +150,8 @@ func (c *cache) Keys(mask string) []string {
 			for k := range sh.items {
 				if g.Match(k) {
 					mx.Lock()
-					defer mx.Unlock()
 					matchings = append(matchings, k)
+					mx.Unlock()
 				}
 			}
 		}(sh)
@@ -183,7 +186,7 @@ func (c *cache) readDump() {
 		go func(sh *shard) {
 			defer wg.Done()
 			for k, v := range sh.items {
-				c.GCChan <- itemOnDelete{key: k, val: v}
+				c.gcChan <- itemOnDelete{key: k, val: v}
 			}
 		}(sh)
 	}
@@ -214,7 +217,7 @@ func (c *cache) doExpiration() {
 	signal.Notify(interrupt, os.Interrupt, os.Kill, syscall.SIGTERM)
 	for {
 		select {
-		case item := <-c.GCChan:
+		case item := <-c.gcChan:
 			log.Debugln("item to purge", item.key, "time", item.val.TTL)
 			if item.val.TTL == 0 {
 				break
@@ -242,7 +245,7 @@ func (c *cache) Close() {
 		log.Warningln(err)
 		return
 	}
-	close(c.GCChan)
+	close(c.gcChan)
 	log.Debugln("cache closed")
 }
 
@@ -261,8 +264,10 @@ func (c *cache) getOrCreateShard(key string) (*shard, string, error) {
 }
 
 func (c *cache) newShard(shardKey string) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	c.shards[shardKey] = &shard{
-		shMux: new(sync.RWMutex),
+		shMux: sync.RWMutex{},
 		items: make(map[string]*Value, c.opt.ItemsNum),
 	}
 }
